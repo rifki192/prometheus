@@ -684,9 +684,11 @@ func (c *scrapeCache) getMetadata(metric string) (MetricMetadata, bool) {
 	}, true
 }
 
-func (c *scrapeCache) listMetadata() (res []MetricMetadata) {
+func (c *scrapeCache) listMetadata() []MetricMetadata {
 	c.metaMtx.Lock()
 	defer c.metaMtx.Unlock()
+
+	res := make([]MetricMetadata, 0, len(c.metadata))
 
 	for m, e := range c.metadata {
 		res = append(res, MetricMetadata{
