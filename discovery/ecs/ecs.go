@@ -169,94 +169,83 @@ func (d *Discovery) refresh() (tg *targetgroup.Group, err error) {
 			ecsSDRefreshFailureCount.Inc()
 		}
 	}()
+
+	config := sdk.NewConfig()
 	// Create a credential object
 	credential := &credentials.BaseCredential{
 		AccessKeyId:     d.config.AccessKey,
 		AccessKeySecret: string(d.config.SecretKey),
 	}
-
-	tg, err = getListNodes(d.config, credential)
+	// Initiate the client
+	client, err := ecs.NewClientWithOptions(d.config.Region, config, credential)
 	if err != nil {
-		return nil, fmt.Errorf("%s", err)
+		return nil, fmt.Errorf("could not create alibaba client: %s", err)
 	}
 
-	return tg, nil
-}
+	tg = &targetgroup.Group{
+		Source: d.config.Region,
+	}
 
-func getListNodes(conf SDConfig, credential *credentials.BaseCredential) (tg *targetgroup.Group, err error) {
-	config := sdk.NewConfig()
-
-	for _, region := range conf.Region {
-		// Initiate the client
-		client, err := ecs.NewClientWithOptions(region, config, credential)
+	/// Create an API request and set parameters
+	request := ecs.CreateDescribeInstancesRequest()
+	// Set the request.PageSize
+	request.PageSize = requests.NewInteger(pageSize)
+	totalPages := 1
+	for i := 1; i <= totalPages; i++ {
+		request.PageNumber = requests.NewInteger(int(i))
+		response, err := client.DescribeInstances(request)
 		if err != nil {
-			return nil, fmt.Errorf("could not create alibaba client: %s", err)
+			// Handle exceptions
+			return nil, fmt.Errorf("could not send request to alibaba: %s", err)
 		}
+		totalInstances := response.TotalCount
+		totalPages = int(math.Ceil(float64(totalInstances) / float64(pageSize)))
 
-		tg = &targetgroup.Group{
-			Source: region,
-		}
-
-		/// Create an API request and set parameters
-		request := ecs.CreateDescribeInstancesRequest()
-		// Set the request.PageSize
-		request.PageSize = requests.NewInteger(pageSize)
-		totalPages := 1
-		for i := 1; i <= totalPages; i++ {
-			request.PageNumber = requests.NewInteger(int(i))
-			response, err := client.DescribeInstances(request)
-			if err != nil {
-				// Handle exceptions
-				return nil, fmt.Errorf("could not send request to alibaba: %s", err)
+		for _, inst := range response.Instances.Instance {
+			labels := model.LabelSet{
+				ecsLabelInstanceID: model.LabelValue(inst.InstanceId),
 			}
-			totalInstances := response.TotalCount
-			totalPages = int(math.Ceil(float64(totalInstances) / float64(pageSize)))
-
-			for _, inst := range response.Instances.Instance {
-				labels := model.LabelSet{
-					ecsLabelInstanceID: model.LabelValue(inst.InstanceId),
-				}
-				labels[ecsLabelPrivateIP] = model.LabelValue(inst.NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress)
-				addr := net.JoinHostPort(inst.NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress, fmt.Sprintf("%d", conf.Port))
-				labels[model.AddressLabel] = model.LabelValue(addr)
-				if len(inst.PublicIpAddress.IpAddress) > 0 {
-					labels[ecsLabelPublicIP] = model.LabelValue(inst.PublicIpAddress.IpAddress[0])
-				}
-				if inst.EipAddress.IpAddress != "" {
-					labels[ecsLabelElasticIP] = model.LabelValue(inst.EipAddress.IpAddress)
-				}
-
-				labels[ecsLabelAZ] = model.LabelValue(inst.ZoneId)
-				labels[ecsLabelInstanceType] = model.LabelValue(inst.InstanceType)
-				labels[ecsLabelInstanceStatus] = model.LabelValue(inst.Status)
-
-				if inst.VpcAttributes.VpcId != "" {
-					labels[ecsLabelVPCID] = model.LabelValue(inst.VpcAttributes.VpcId)
-
-					subnetsMap := make(map[string]struct{})
-					for _, eni := range inst.NetworkInterfaces.NetworkInterface {
-						subnetsMap[eni.VSwitchId] = struct{}{}
-					}
-					subnets := []string{}
-					for k := range subnetsMap {
-						subnets = append(subnets, k)
-					}
-					labels[ecsLabelSubnetID] = model.LabelValue(
-						subnetSeparator +
-							strings.Join(subnets, subnetSeparator) +
-							subnetSeparator)
-				}
-
-				for _, tag := range inst.Tags.Tag {
-					if tag.TagKey == "" || tag.TagValue == "" {
-						continue
-					}
-					name := strutil.SanitizeLabelName(tag.TagKey)
-					labels[ecsLabelTag+model.LabelName(name)] = model.LabelValue(tag.TagValue)
-				}
-				tg.Targets = append(tg.Targets, labels)
+			labels[ecsLabelPrivateIP] = model.LabelValue(inst.NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress)
+			addr := net.JoinHostPort(inst.NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress, fmt.Sprintf("%d", d.port))
+			labels[model.AddressLabel] = model.LabelValue(addr)
+			if len(inst.PublicIpAddress.IpAddress) > 0 {
+				labels[ecsLabelPublicIP] = model.LabelValue(inst.PublicIpAddress.IpAddress[0])
 			}
+			if inst.EipAddress.IpAddress != "" {
+				labels[ecsLabelElasticIP] = model.LabelValue(inst.EipAddress.IpAddress)
+			}
+
+			labels[ecsLabelAZ] = model.LabelValue(inst.ZoneId)
+			labels[ecsLabelInstanceType] = model.LabelValue(inst.InstanceType)
+			labels[ecsLabelInstanceStatus] = model.LabelValue(inst.Status)
+
+			if inst.VpcAttributes.VpcId != "" {
+				labels[ecsLabelVPCID] = model.LabelValue(inst.VpcAttributes.VpcId)
+
+				subnetsMap := make(map[string]struct{})
+				for _, eni := range inst.NetworkInterfaces.NetworkInterface {
+					subnetsMap[eni.VSwitchId] = struct{}{}
+				}
+				subnets := []string{}
+				for k := range subnetsMap {
+					subnets = append(subnets, k)
+				}
+				labels[ecsLabelSubnetID] = model.LabelValue(
+					subnetSeparator +
+						strings.Join(subnets, subnetSeparator) +
+						subnetSeparator)
+			}
+
+			for _, tag := range inst.Tags.Tag {
+				if tag.TagKey == "" || tag.TagValue == "" {
+					continue
+				}
+				name := strutil.SanitizeLabelName(tag.TagKey)
+				labels[ecsLabelTag+model.LabelName(name)] = model.LabelValue(tag.TagValue)
+			}
+			tg.Targets = append(tg.Targets, labels)
 		}
 	}
+
 	return tg, nil
 }
