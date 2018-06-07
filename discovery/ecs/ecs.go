@@ -78,7 +78,7 @@ type Filter struct {
 }
 
 type SDConfig struct {
-	Region          []string           `yaml:"region"`
+	Region          string             `yaml:"region"`
 	AccessKey       string             `yaml:"access_key,omitempty"`
 	SecretKey       config_util.Secret `yaml:"secret_key,omitempty"`
 	RefreshInterval model.Duration     `yaml:"refresh_interval,omitempty"`
@@ -93,7 +93,7 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return err
 	}
-	if c.Region == nil {
+	if c.Region == "" {
 		return fmt.Errorf("ECS SD configuration requires a region")
 	}
 	return nil
