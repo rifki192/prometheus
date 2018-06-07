@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/consul"
 	"github.com/prometheus/prometheus/discovery/dns"
 	"github.com/prometheus/prometheus/discovery/ec2"
+	"github.com/prometheus/prometheus/discovery/ecs"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/gce"
 	"github.com/prometheus/prometheus/discovery/kubernetes"
@@ -255,6 +256,9 @@ func (m *Manager) providersFromConfig(cfg sd_config.ServiceDiscoveryConfig) map[
 	}
 	for i, c := range cfg.EC2SDConfigs {
 		app("ec2", i, ec2.NewDiscovery(c, log.With(m.logger, "discovery", "ec2")))
+	}
+	for i, c := range cfg.ECSSDConfigs {
+		app("ecs", i, ecs.NewDiscovery(c, log.With(m.logger, "discovery", "ecs")))
 	}
 	for i, c := range cfg.OpenstackSDConfigs {
 		openstackd, err := openstack.NewDiscovery(c, log.With(m.logger, "discovery", "openstack"))
