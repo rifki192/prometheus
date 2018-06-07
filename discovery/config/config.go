@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/consul"
 	"github.com/prometheus/prometheus/discovery/dns"
 	"github.com/prometheus/prometheus/discovery/ec2"
+	"github.com/prometheus/prometheus/discovery/ecs"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/gce"
 	"github.com/prometheus/prometheus/discovery/kubernetes"
@@ -50,6 +51,8 @@ type ServiceDiscoveryConfig struct {
 	GCESDConfigs []*gce.SDConfig `yaml:"gce_sd_configs,omitempty"`
 	// List of EC2 service discovery configurations.
 	EC2SDConfigs []*ec2.SDConfig `yaml:"ec2_sd_configs,omitempty"`
+	// List of Alibaba ECS service discovery configurations.
+	ECSSDConfigs []*ecs.SDConfig `yaml:"ecs_sd_configs,omitempty"`
 	// List of OpenStack service discovery configurations.
 	OpenstackSDConfigs []*openstack.SDConfig `yaml:"openstack_sd_configs,omitempty"`
 	// List of Azure service discovery configurations.
